@@ -1,0 +1,17 @@
+{
+  "name": "Inglés TDIE — Preparación B2",
+  "short_name": "TDIE",
+  "description": "Deletreo, escritura y expresión oral para el Test de Dominio de Idioma Extranjero del Ejército de Chile.",
+  "lang": "es-CL",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#11141b",
+  "theme_color": "#11141b",
+  "icons": [
+    {"src": "iconos/icono-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "iconos/icono-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "iconos/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

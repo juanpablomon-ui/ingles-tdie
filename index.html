@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inglés TDIE</title>
+<meta name="theme-color" content="#11141b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TDIE">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="iconos/icono.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="iconos/icono-180.png">
+<style>
+  /* Pantalla de entrada: pide la clave y descifra la app (paquete.cifrado). Nada del contenido está a la vista sin la clave. */
+  :root{--fondo:#11141b;--panel:#1a1f29;--borde:#2e3546;--texto:#e8ecf3;--suave:#9aa3b5;--acento:#7cc4ff;--error:#ff6b6b;color-scheme:dark}
+  html,body{margin:0;min-height:100%;background:var(--fondo);color:var(--texto);font:16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif}
+  #entrada{min-height:100vh;display:grid;place-items:center;padding:24px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left))}
+  form{width:100%;max-width:360px;background:var(--panel);border:1px solid var(--borde);border-radius:16px;padding:24px;display:grid;gap:12px}
+  .marca{display:flex;align-items:center;gap:10px}
+  .marca img{width:42px;height:42px;border-radius:10px}
+  .marca b{display:block;letter-spacing:.06em}
+  .marca small{color:var(--suave)}
+  label{color:var(--suave);font-size:14px}
+  input[type=password]{font:inherit;color:inherit;background:#0e1219;border:1px solid var(--borde);border-radius:10px;padding:11px 12px;width:100%;box-sizing:border-box}
+  input:focus{outline:2px solid var(--acento);outline-offset:0}
+  .recordar{display:flex;gap:8px;align-items:center;color:var(--texto)}
+  button{font:inherit;font-weight:600;background:var(--acento);color:#08121e;border:0;border-radius:10px;padding:11px;cursor:pointer}
+  button:disabled{opacity:.6}
+  #msg{min-height:1.4em;font-size:14px;color:var(--error)}
+</style>
+</head>
+<body>
+<div id="entrada">
+  <form id="f" autocomplete="on">
+    <div class="marca"><img src="iconos/icono.svg" alt=""><div><b>INGLÉS TDIE</b><small>Escriba su clave para abrir la app</small></div></div>
+    <input type="text" name="username" value="ingles-tdie" autocomplete="username" hidden>
+    <label for="clave">Clave</label>
+    <input type="password" id="clave" autocomplete="current-password" required>
+    <label class="recordar"><input type="checkbox" id="recordar" checked> Recordar en este equipo</label>
+    <button id="entrar">Entrar</button>
+    <div id="msg" role="alert"></div>
+  </form>
+</div>
+<script>
+(function(){
+  const LLAVE = 'tdie_llave', $ = s=>document.querySelector(s);
+  const de64 = s=>Uint8Array.from(atob(s), c=>c.charCodeAt(0));
+  let paquete = null;
+  async function cargar(){ if(!paquete){ const r = await fetch('paquete.cifrado', {cache:'no-cache'}); if(!r.ok) throw new Error('red'); paquete = await r.json(); } return paquete; }
+  async function llaveDe(clave, p){
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(clave), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({name:'PBKDF2', salt:de64(p.sal), iterations:p.vueltas, hash:'SHA-256'}, base, {name:'AES-GCM', length:256}, true, ['decrypt']);
+  }
+  async function abrir(llave, p){
+    const plano = await crypto.subtle.decrypt({name:'AES-GCM', iv:de64(p.iv)}, llave, de64(p.datos)); // falla si la clave no es la correcta
+    const app = JSON.parse(new TextDecoder().decode(plano));
+    // imágenes como blob (para que no ocupen memoria como texto)
+    window.__recursos = {};
+    for(const [ruta, uri] of Object.entries(app.imagenes||{})){ const b = await (await fetch(uri)).blob(); window.__recursos[ruta] = URL.createObjectURL(b); }
+    const st = document.createElement('style'); st.textContent = app.css; document.head.appendChild(st);
+    document.body.innerHTML = app.cuerpo;
+    for(const s of app.scripts){ const el = document.createElement('script'); el.textContent = s.js + '\n//# sourceURL=' + s.f; document.body.appendChild(el); }
+  }
+  async function guardada(p){
+    let jwk = null; try { jwk = JSON.parse(localStorage.getItem(LLAVE)); } catch(e){}
+    if(!jwk || jwk.sal!==p.sal) return null;
+    try { return await crypto.subtle.importKey('jwk', jwk.k, {name:'AES-GCM'}, true, ['decrypt']); } catch(e){ return null; }
+  }
+  (async()=>{
+    try { const p = await cargar(), k = await guardada(p); if(k){ await abrir(k, p); return; } }
+    catch(e){ try { localStorage.removeItem(LLAVE); } catch(_){ } if(e.message==='red') $('#msg').textContent = 'Sin conexión: ábrala una vez con internet.'; }
+    $('#clave').focus();
+  })();
+  $('#f').onsubmit = async e=>{
+    e.preventDefault(); const b = $('#entrar'); b.disabled = true; b.textContent = 'Abriendo…'; $('#msg').textContent = '';
+    try {
+      const recordar = $('#recordar').checked, p = await cargar(), k = await llaveDe($('#clave').value, p);
+      await abrir(k, p);
+      if(recordar){ try { localStorage.setItem(LLAVE, JSON.stringify({sal:p.sal, k:await crypto.subtle.exportKey('jwk', k)})); } catch(_){ } }
+    } catch(err){
+      if(!$('#f')) return;
+      $('#msg').textContent = err.message==='red' ? 'No se pudo descargar la app. Revise la conexión.' : 'Clave incorrecta.';
+      b.disabled = false; b.textContent = 'Entrar'; $('#clave').select();
+    }
+  };
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+})();
+</script>
+</body>
+</html>
